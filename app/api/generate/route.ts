@@ -14,6 +14,7 @@ interface GenerateBody {
   aspect_ratio?: unknown;
   quality?: unknown;
   output_format?: unknown;
+  nsfw_checker?: unknown;
 }
 
 /**
@@ -71,6 +72,10 @@ export async function POST(request: Request) {
     if (!isOutputFormat(outputFormat)) {
       return NextResponse.json({ error: "output_format không hợp lệ (png | jpeg)." }, { status: 400 });
     }
+    const nsfwChecker = body.nsfw_checker ?? false;
+    if (typeof nsfwChecker !== "boolean") {
+      return NextResponse.json({ error: "nsfw_checker phải là boolean." }, { status: 400 });
+    }
 
     const taskId = await createImageTask({
       prompt,
@@ -78,6 +83,7 @@ export async function POST(request: Request) {
       aspectRatio: body.aspect_ratio,
       quality: body.quality,
       outputFormat,
+      nsfwChecker,
     });
 
     return NextResponse.json({ taskId });

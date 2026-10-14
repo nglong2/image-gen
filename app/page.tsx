@@ -57,6 +57,7 @@ export default function Home() {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("1:1");
   const [quality, setQuality] = useState<Quality>("basic");
   const [outputFormat, setOutputFormat] = useState<OutputFormat>("png");
+  const [nsfwChecker, setNsfwChecker] = useState(false);
   const [status, setStatus] = useState<Status>("idle");
   const [genState, setGenState] = useState<TaskState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -197,6 +198,7 @@ export default function Home() {
           aspect_ratio: aspectRatio,
           quality,
           output_format: outputFormat,
+          nsfw_checker: nsfwChecker,
         }),
       });
       const generateData = await generateRes.json().catch(() => null);
@@ -500,6 +502,23 @@ export default function Home() {
               </select>
             </label>
           </div>
+
+          <label className="flex items-start gap-2.5 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/50">
+            <input
+              type="checkbox"
+              checked={nsfwChecker}
+              disabled={isBusy}
+              onChange={(event) => setNsfwChecker(event.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-zinc-900 dark:accent-zinc-100"
+            />
+            <span className="text-sm">
+              <span className="font-medium">NSFW checker</span>
+              <span className="block text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                Tắt (mặc định) = không lọc nội dung thêm, mô hình trả kết quả trực tiếp. Bật =
+                kiểm tra nội dung nhạy cảm trước khi trả về.
+              </span>
+            </span>
+          </label>
 
           <button
             type="button"

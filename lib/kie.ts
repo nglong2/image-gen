@@ -103,6 +103,7 @@ export interface CreateTaskOptions {
   aspectRatio: AspectRatio;
   quality: Quality;
   outputFormat: OutputFormat;
+  nsfwChecker: boolean;
 }
 
 /** Tạo task chỉnh sửa ảnh (Seedream 5.0 Pro image-to-image), trả về taskId. */
@@ -118,6 +119,7 @@ export async function createImageTask(options: CreateTaskOptions): Promise<strin
         aspect_ratio: options.aspectRatio,
         quality: options.quality,
         output_format: options.outputFormat,
+        nsfw_checker: options.nsfwChecker,
       },
     }),
   });
