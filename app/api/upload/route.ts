@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { errorResponse, uploadImageBase64 } from "@/lib/kie";
+import { errorResponse, uploadImageBase64, verifyAppKey } from "@/lib/kie";
 import { validateImageFile } from "@/lib/kie-shared";
 
 /**
@@ -7,6 +7,9 @@ import { validateImageFile } from "@/lib/kie-shared";
  * chuyển sang base64 và tải lên kie.ai, trả về { downloadUrl }.
  */
 export async function POST(request: Request) {
+  const denied = verifyAppKey(request);
+  if (denied) return denied;
+
   try {
     const form = await request.formData();
     const file = form.get("file");

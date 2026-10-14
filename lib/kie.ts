@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  APP_KEY_HEADER,
   SEEDREAM_MODEL,
   type AspectRatio,
   type OutputFormat,
@@ -173,4 +174,26 @@ export function errorResponse(err: unknown): NextResponse {
     { error: "Đã xảy ra lỗi không xác định. Vui lòng thử lại." },
     { status: 500 },
   );
+}
+
+/**
+ * Kiểm tra App key truy cập (header x-app-key so với APP_ACCESS_KEY trong env).
+ * Trả về null nếu hợp lệ, ngược lại là NextResponse lỗi (403/503) để route return ngay.
+ */
+export function verifyAppKey(request: Request): NextResponse | null {
+  const expected = process.env.APP_ACCESS_KEY?.trim();
+  if (!expected) {
+    return NextResponse.json(
+      { error: "Chưa cấu hình APP_ACCESS_KEY trong file .env.local.", code: 503 },
+      { status: 503 },
+    );
+  }
+  const provided = request.headers.get(APP_KEY_HEADER)?.trim();
+  if (!provided || provided !== expected) {
+    return NextResponse.json(
+      { error: "App key không đúng. Nhập key hợp lệ do người quản trị cấp.", code: 403 },
+      { status: 403 },
+    );
+  }
+  return null;
 }

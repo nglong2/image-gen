@@ -27,6 +27,9 @@ export const PROMPT_MAX = 5000;
 export const MAX_IMAGE_SIZE = 30 * 1024 * 1024;
 export const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 
+/** Header chứa App key do client gửi lên để server kiểm tra truy cập. */
+export const APP_KEY_HEADER = "x-app-key";
+
 export function isAspectRatio(value: unknown): value is AspectRatio {
   return typeof value === "string" && (ASPECT_RATIOS as readonly string[]).includes(value);
 }

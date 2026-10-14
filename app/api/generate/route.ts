@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createImageTask, errorResponse } from "@/lib/kie";
+import { createImageTask, errorResponse, verifyAppKey } from "@/lib/kie";
 import {
   PROMPT_MAX,
   PROMPT_MIN,
@@ -22,6 +22,9 @@ interface GenerateBody {
  * trả về { taskId } để poll qua GET /api/task.
  */
 export async function POST(request: Request) {
+  const denied = verifyAppKey(request);
+  if (denied) return denied;
+
   try {
     let body: GenerateBody;
     try {

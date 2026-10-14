@@ -1,8 +1,9 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useRef, useState, type ClipboardEvent, type SyntheticEvent } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ClipboardEvent, type SyntheticEvent } from "react";
 import {
+  APP_KEY_HEADER,
   ASPECT_RATIOS,
   OUTPUT_FORMATS,
   PROMPT_MAX,
@@ -51,6 +52,11 @@ const STATUS_LABELS: Record<Status, string> = {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Đọc App key từ localStorage qua useSyncExternalStore (không cần setState trong effect)
+const subscribeNoop = () => () => {};
+const getStoredAppKey = () => window.localStorage.getItem("appAccessKey") ?? "";
+const getServerAppKey = () => "";
+
 export default function Home() {
   const [image, setImage] = useState<SourceImage | null>(null);
   const [prompt, setPrompt] = useState("");
@@ -58,6 +64,9 @@ export default function Home() {
   const [quality, setQuality] = useState<Quality>("basic");
   const [outputFormat, setOutputFormat] = useState<OutputFormat>("png");
   const [nsfwChecker, setNsfwChecker] = useState(false);
+  const [appKeyDraft, setAppKeyDraft] = useState<string | null>(null);
+  const storedAppKey = useSyncExternalStore(subscribeNoop, getStoredAppKey, getServerAppKey);
+  const appKey = appKeyDraft ?? storedAppKey;
   const [status, setStatus] = useState<Status>("idle");
   const [genState, setGenState] = useState<TaskState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -159,6 +168,11 @@ export default function Home() {
       setStatus("error");
       return;
     }
+    if (!appKey.trim()) {
+      setError("Vui lòng nhập App key (do người quản trị cấp) trước khi tạo ảnh.");
+      setStatus("error");
+      return;
+    }
 
     cancelledRef.current = false;
     setError(null);
@@ -177,7 +191,11 @@ export default function Home() {
           setStatus("uploading");
           const formData = new FormData();
           formData.append("file", image.file);
-          const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
+          const uploadRes = await fetch("/api/upload", {
+            method: "POST",
+            headers: { [APP_KEY_HEADER]: appKey.trim() },
+            body: formData,
+          });
           const uploadData = await uploadRes.json().catch(() => null);
           if (!uploadRes.ok || !uploadData?.downloadUrl) {
             throw new Error(uploadData?.error ?? "Tải ảnh lên thất bại.");
@@ -191,7 +209,7 @@ export default function Home() {
       setStatus("creating");
       const generateRes = await fetch("/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", [APP_KEY_HEADER]: appKey.trim() },
         body: JSON.stringify({
           prompt: trimmed,
           image_urls: [imageUrl],
@@ -216,7 +234,9 @@ export default function Home() {
         await sleep(POLL_INTERVAL_MS);
         if (cancelledRef.current) return;
 
-        const taskRes = await fetch(`/api/task?taskId=${encodeURIComponent(generateData.taskId)}`);
+        const taskRes = await fetch(`/api/task?taskId=${encodeURIComponent(generateData.taskId)}`, {
+          headers: { [APP_KEY_HEADER]: appKey.trim() },
+        });
         const taskData = await taskRes.json().catch(() => null);
         if (!taskRes.ok) {
           throw new Error(taskData?.error ?? "Không kiểm tra được trạng thái tác vụ.");
@@ -519,6 +539,29 @@ export default function Home() {
               </span>
             </span>
           </label>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="app-key" className="text-sm font-medium">
+              App key
+            </label>
+            <input
+              id="app-key"
+              type="password"
+              value={appKey}
+              disabled={isBusy}
+              onChange={(event) => {
+                const value = event.target.value;
+                setAppKeyDraft(value);
+                window.localStorage.setItem("appAccessKey", value);
+              }}
+              placeholder="Nhập App key do người quản trị cấp"
+              autoComplete="off"
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:ring-zinc-800"
+            />
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Chỉ cần nhập một lần — key được lưu trong trình duyệt của bạn.
+            </p>
+          </div>
 
           <button
             type="button"

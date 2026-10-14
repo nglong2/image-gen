@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
-import { errorResponse, getTaskStatus } from "@/lib/kie";
+import { errorResponse, getTaskStatus, verifyAppKey } from "@/lib/kie";
 
 /**
  * GET /api/task?taskId=... — truy vấn trạng thái task,
  * trả về { state, resultUrls, failMsg? }.
  */
 export async function GET(request: Request) {
+  const denied = verifyAppKey(request);
+  if (denied) return denied;
+
   // Đọc request.url ngoài try/catch để Next xử lý bail-out prerender im lặng
   const taskId = new URL(request.url).searchParams.get("taskId");
   if (!taskId) {
