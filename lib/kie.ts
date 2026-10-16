@@ -1,12 +1,6 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import {
-  APP_KEY_HEADER,
-  SEEDREAM_MODEL,
-  type AspectRatio,
-  type OutputFormat,
-  type Quality,
-  type TaskState,
-} from "./kie-shared";
+import { APP_KEY_HEADER, type TaskState } from "./kie-shared";
 
 export const KIE_API_BASE = "https://api.kie.ai";
 export const KIE_UPLOAD_BASE = "https://kieai.redpandaai.co";
@@ -37,7 +31,15 @@ const ERROR_MESSAGES: Record<number, string> = {
 };
 
 export function kieErrorMessage(code: number, fallback?: string | null): string {
-  return ERROR_MESSAGES[code] ?? fallback ?? `Lỗi không xác định từ kie.ai (mã ${code}).`;
+  const raw = fallback?.trim() ?? "";
+  if (code === 500 && raw) {
+    // kie đôi khi trả code 500 kèm msg chi tiết (hết credit, sai param…) → giữ msg thô
+    if (/credits insufficient/i.test(raw)) {
+      return "Số credit không đủ để thực hiện yêu cầu. Vui lòng nạp thêm tại kie.ai/pricing.";
+    }
+    if (!/^server error/i.test(raw)) return raw;
+  }
+  return ERROR_MESSAGES[code] ?? raw ?? `Lỗi không xác định từ kie.ai (mã ${code}).`;
 }
 
 interface Envelope<T> {
@@ -98,31 +100,12 @@ export async function uploadImageBase64(dataUrl: string): Promise<string> {
   return downloadUrl;
 }
 
-export interface CreateTaskOptions {
-  prompt: string;
-  imageUrls: string[];
-  aspectRatio: AspectRatio;
-  quality: Quality;
-  outputFormat: OutputFormat;
-  nsfwChecker: boolean;
-}
-
-/** Tạo task chỉnh sửa ảnh (Seedream 5.0 Pro image-to-image), trả về taskId. */
-export async function createImageTask(options: CreateTaskOptions): Promise<string> {
+/** Tạo task chung cho mọi model (ảnh/video), trả về taskId. */
+export async function createTask(model: string, input: Record<string, unknown>): Promise<string> {
   const body = await kieRequest<{ taskId?: string }>(`${KIE_API_BASE}/api/v1/jobs/createTask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: SEEDREAM_MODEL,
-      input: {
-        prompt: options.prompt,
-        image_urls: options.imageUrls,
-        aspect_ratio: options.aspectRatio,
-        quality: options.quality,
-        output_format: options.outputFormat,
-        nsfw_checker: options.nsfwChecker,
-      },
-    }),
+    body: JSON.stringify({ model, input }),
   });
 
   if (!body.data?.taskId) {
@@ -135,6 +118,8 @@ export interface TaskStatus {
   state: TaskState;
   resultUrls: string[];
   failMsg?: string;
+  /** Credit đã tiêu (present khi task kết thúc — success: >0, fail: 0) */
+  credits?: number;
 }
 
 /** Truy vấn trạng thái task qua GET /api/v1/jobs/recordInfo. */
@@ -143,6 +128,7 @@ export async function getTaskStatus(taskId: string): Promise<TaskStatus> {
     state?: string;
     resultJson?: string;
     failMsg?: string;
+    creditsConsumed?: number;
   }>(`${KIE_API_BASE}/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`);
 
   const data = body.data;
@@ -158,7 +144,14 @@ export async function getTaskStatus(taskId: string): Promise<TaskStatus> {
     }
   }
 
-  return { state, resultUrls, failMsg: data?.failMsg };
+  return { state, resultUrls, failMsg: data?.failMsg, credits: data?.creditsConsumed };
+}
+
+/** Số dư credit hiện tại của tài khoản kie.ai. */
+export async function getCreditBalance(): Promise<number> {
+  const body = await kieRequest<number>(`${KIE_API_BASE}/api/v1/chat/credit`);
+  const value = Number(body.data);
+  return Number.isFinite(value) ? value : 0;
 }
 
 /** Chuyển lỗi của route handler sang phản hồi JSON. */
@@ -176,6 +169,13 @@ export function errorResponse(err: unknown): NextResponse {
   );
 }
 
+/** So sánh key an toàn timing (hash SHA-256 rồi compare — tránh lộ thông tin qua thời gian). */
+function appKeyMatches(provided: string, expected: string): boolean {
+  const a = createHash("sha256").update(provided).digest();
+  const b = createHash("sha256").update(expected).digest();
+  return timingSafeEqual(a, b);
+}
+
 /**
  * Kiểm tra App key truy cập (header x-app-key so với APP_ACCESS_KEY trong env).
  * Trả về null nếu hợp lệ, ngược lại là NextResponse lỗi (403/503) để route return ngay.
@@ -189,7 +189,7 @@ export function verifyAppKey(request: Request): NextResponse | null {
     );
   }
   const provided = request.headers.get(APP_KEY_HEADER)?.trim();
-  if (!provided || provided !== expected) {
+  if (!provided || !appKeyMatches(provided, expected)) {
     return NextResponse.json(
       { error: "App key không đúng. Nhập key hợp lệ do người quản trị cấp.", code: 403 },
       { status: 403 },
