@@ -2,9 +2,16 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import AppKeyField from "@/components/AppKeyField";
 import { useAppKey } from "@/hooks/useAppKey";
+import {
+  getHistorySnapshot,
+  getServerHistory,
+  removeHistoryItem,
+  subscribeHistory,
+  updateHistoryItem,
+} from "@/lib/history";
 import { APP_KEY_HEADER } from "@/lib/kie-shared";
 
 interface HistoryItem {
@@ -34,6 +41,12 @@ export default function HistoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Task pending từ localStorage (bắt đầu gen rồi thoát app — vô đây sẽ tự theo dõi lại)
+  const localItems = useSyncExternalStore(subscribeHistory, getHistorySnapshot, getServerHistory);
+  const pending = localItems.filter((item) => item.state === "pending");
+  const resumeRef = useRef<Set<string>>(new Set());
+  const aliveRef = useRef(true);
+
   const load = useCallback(async (key: string) => {
     if (!key.trim()) {
       setItems([]);
@@ -62,6 +75,80 @@ export default function HistoryPage() {
     const timer = setTimeout(() => void load(key), 500);
     return () => clearTimeout(timer);
   }, [appKey, load]);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
+
+  // Tự theo dõi lại các task pending: poll tới success/fail rồi lưu R2 + refresh danh sách
+  useEffect(() => {
+    const key = appKey.trim();
+    if (!key) return;
+    for (const item of localItems) {
+      if (item.state !== "pending") continue;
+      if (resumeRef.current.has(item.id)) continue;
+      resumeRef.current.add(item.id);
+      void (async () => {
+        for (let attempt = 0; attempt < 240; attempt += 1) {
+          // ~20 phút mỗi lượt — quá lượt thì giữ pending, lần vô sau tự tiếp
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+          if (!aliveRef.current) return;
+          let data: { state?: string; resultUrls?: string[]; failMsg?: string; credits?: number };
+          try {
+            const res = await fetch(`/api/task?taskId=${encodeURIComponent(item.id)}`, {
+              headers: { [APP_KEY_HEADER]: key },
+            });
+            data = (await res.json().catch(() => null)) ?? {};
+            if (!res.ok) return;
+          } catch {
+            return;
+          }
+          if (!aliveRef.current) return;
+
+          if (data.state === "success") {
+            const urls = Array.isArray(data.resultUrls) ? data.resultUrls : [];
+            if (urls.length === 0) {
+              removeHistoryItem(item.id);
+              return;
+            }
+            updateHistoryItem(item.id, { state: "success", urls, credits: data.credits });
+            try {
+              await fetch("/api/history/save", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", [APP_KEY_HEADER]: key },
+                body: JSON.stringify({
+                  taskId: item.id,
+                  tool: item.tool,
+                  model: item.model,
+                  prompt: item.prompt,
+                  resultKind: item.resultKind,
+                  credits: data.credits,
+                  createdAt: item.createdAt,
+                  sourceUrls: urls,
+                }),
+              });
+            } catch {
+              // best-effort
+            }
+            if (aliveRef.current) void load(key);
+            return;
+          }
+          if (data.state === "fail") {
+            removeHistoryItem(item.id);
+            if (aliveRef.current) {
+              setError(
+                `Task ${item.id.slice(0, 8)} thất bại${data.failMsg ? `: ${data.failMsg}` : "."}`,
+              );
+            }
+            return;
+          }
+        }
+      })();
+    }
+  }, [appKey, localItems, load]);
 
   const handleDelete = async (taskId: string) => {
     if (!appKey.trim()) return;
@@ -126,6 +213,22 @@ export default function HistoryPage() {
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">
+        {pending.length > 0 && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-950/50 dark:text-amber-300">
+            ⏳ <b>{pending.length} task đang chờ hoàn tất</b> — đang tự theo dõi lại, kết quả sẽ
+            tự cập nhật + lưu vào R2…
+            <ul className="mt-1.5 space-y-0.5 text-xs opacity-90">
+              {pending.map((item) => (
+                <li key={item.id}>
+                  • {(TOOL_LABELS[item.tool] ?? item.tool)} —{" "}
+                  {item.prompt ? `${item.prompt.slice(0, 60)}…` : "(không có prompt)"} ·{" "}
+                  {new Date(item.createdAt).toLocaleTimeString("vi-VN")}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {error && (
           <div
             role="alert"

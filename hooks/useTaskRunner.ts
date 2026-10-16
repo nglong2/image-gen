@@ -38,7 +38,6 @@ const POLL: Record<ToolResultKind, { interval: number; maxAttempts: number }> = 
   video: { interval: 5000, maxAttempts: 180 }, // ~15 phút
 };
 
-const RESUME_MAX_AGE_MS = 45 * 60 * 1000; // task pending cũ hơn 45 phút thì bỏ
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -213,13 +212,14 @@ export function useTaskRunner(tool: ToolConfig) {
     [],
   );
 
-  // Resume các task còn "pending" sau khi F5/trang reload (không chiếm UI)
+  // Resume các task còn "pending" sau khi F5/thoát app rồi vô lại —
+  // không giới hạn tuổi (taskId vẫn query được, kie giữ log2 tháng);
+  // poll hết lượt mà task chưa xong thì giữ pending, lần vào sau tự tiếp.
   useEffect(() => {
     const key = getStoredAppKey();
     if (!key) return;
     for (const item of history) {
       if (item.state !== "pending") continue;
-      if (Date.now() - item.createdAt > RESUME_MAX_AGE_MS) continue;
       if (resumedRef.current.has(item.id)) continue;
       resumedRef.current.add(item.id);
       void pollUntilDone(item.id, key, item.resultKind, () => {})
