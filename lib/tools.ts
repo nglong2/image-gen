@@ -41,7 +41,7 @@ export interface ModelOption {
 }
 
 export type ToolResultKind = "image" | "video";
-export type ToolInputKind = "none" | "image";
+export type ToolInputKind = "none" | "image" | "video";
 
 export interface ToolConfig {
   slug: string;
@@ -395,6 +395,64 @@ export const TOOLS: ToolConfig[] = [
     resultKind: "video",
     inputKind: "image",
     imageField: "first_frame_url",
+    imageAsArray: false,
+    requireVideoInput: true,
+    models: [
+      {
+        value: "bytedance/seedance-2-mini",
+        label: "Seedance 2.0 Mini",
+        overrides: {
+          refImagesField: "reference_image_urls",
+          refImagesAsArray: true,
+          refImagesMax: 9,
+          refVideoField: "reference_video_urls",
+          refVideoMax: 3,
+          refVideoSecondsHint: "tổng video ref ≤15s",
+          options: [resSpec(RES_LOW), durSpec(5, 15, true)],
+          prompt: { min: 4, max: 20000 },
+        },
+      },
+      {
+        value: "bytedance/seedance-2-fast",
+        label: "Seedance 2.0",
+        overrides: {
+          refImagesField: "reference_image_urls",
+          refImagesAsArray: true,
+          refImagesMax: 9,
+          refVideoField: "reference_video_urls",
+          refVideoMax: 3,
+          refVideoSecondsHint: "tổng video ref ≤15s",
+          options: [resSpec(RES_LOW), durSpec(5, 15, true)],
+          prompt: { min: 4, max: 20000 },
+        },
+      },
+      {
+        value: "bytedance/seedance-2-5",
+        label: "Seedance 2.5 (mới nhất, tới 30s)",
+        overrides: {
+          refImagesField: "reference_image_urls",
+          refImagesAsArray: true,
+          refImagesMax: 30,
+          refVideoField: "reference_video_urls",
+          refVideoMax: 10,
+          refVideoSecondsHint: "tổng video ref ≤30s",
+          options: [resSpec(RES_FULL), durSpec(5, 30, true), GEN_AUDIO_SPEC],
+          prompt: { min: 4, max: 20480 },
+        },
+      },
+    ],
+    defaultModel: "bytedance/seedance-2-5",
+    prompt: { min: 4, max: 10000 },
+    options: [resSpec(RES_FULL), durSpec(5, 10, false)],
+  },
+  {
+    slug: "video-to-video",
+    title: "Video → Video",
+    description:
+      "Chỉnh video có sẵn theo prompt (multimodal Seedance 2.x) — vd: đổi phong cách, thay object, đổi bối cảnh… giữ nguyên chuyển động gốc.",
+    resultKind: "video",
+    inputKind: "video",
+    imageField: "",
     imageAsArray: false,
     requireVideoInput: true,
     models: [

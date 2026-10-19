@@ -5,7 +5,6 @@ import { TOOLS } from "@/lib/tools";
 const COMING_SOON = [
   "Text → Image",
   "Image Editing",
-  "Video → Video",
   "Video Editing",
   "Video Upscale",
   "Lip Sync",

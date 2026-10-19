@@ -291,6 +291,9 @@ export function useTaskRunner(tool: ToolConfig) {
       ) {
         throw new Error("Cần ít nhất 1 ảnh đầu vào hoặc ref (ảnh/video).");
       }
+      if (tool.inputKind === "video" && !refVideoUrl) {
+        throw new Error("Cần ít nhất 1 video đầu vào.");
+      }
 
       // Bước 2: tạo task
       setStatus("creating");

@@ -123,7 +123,7 @@ export async function POST(request: Request) {
     }
     if (refVideoUrls.length > 0 && !resolved.refVideoField) {
       return badRequest(
-        `Công cụ này không hỗ trợ video ref — hãy dùng công cụ "Video + Ảnh → Video".`,
+        `Công cụ này không hỗ trợ video ref — hãy dùng công cụ "Video → Video" hoặc "Video + Ảnh → Video".`,
       );
     }
     if (resolved.refImagesMax && refImageUrls.length > resolved.refImagesMax) {
@@ -133,14 +133,15 @@ export async function POST(request: Request) {
       return badRequest(`Tối đa ${resolved.refVideoMax} video ref cho model này.`);
     }
 
+    // Validate URL cho mọi media đầu vào (ảnh chính + ref ảnh + ref video)
+    for (const url of [...imageUrls, ...refImageUrls, ...refVideoUrls]) {
+      if (!isHttpUrl(url)) return badRequest(`URL không hợp lệ: ${url}`);
+    }
     if (tool.inputKind === "image") {
       if (imageUrls.length === 0 && refImageUrls.length === 0 && refVideoUrls.length === 0) {
         return badRequest("Cần ít nhất 1 ảnh đầu vào (hoặc ref ảnh/video).");
       }
       if (imageUrls.length > 10) return badRequest("Tối đa 10 ảnh đầu vào.");
-      for (const url of [...imageUrls, ...refImageUrls, ...refVideoUrls]) {
-        if (!isHttpUrl(url)) return badRequest(`URL không hợp lệ: ${url}`);
-      }
     }
 
     const useRefMode = refImageUrls.length > 0 || refVideoUrls.length > 0;
