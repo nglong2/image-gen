@@ -1,0 +1,38 @@
+
+> image-gen-app@0.1.0 dev
+> next dev
+
+▲ Next.js 16.4.0 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.179.25:3000
+- Environments: .env
+✓ Ready in 408ms
+✓ Running next.config.ts took 174ms
+- Cache Components enabled
+- Partial Prefetching enabled
+- Experiments (use with caution):
+  ✓ agentFeedback
+
+  Turbopack has seen frequent file updates and is waiting for the filesystem to settle (0.5s elapsed so far; last modified: "\\\\?\\E:\\Code\\image-gen\\node_modules\\next\\dist\\esm\\client\\lib").
+○ Compiling / ...
+ GET / 200 in 414ms (next.js: 183ms, application-code: 231ms)
+ GET /video-image-to-video 200 in 93ms (next.js: 9ms, application-code: 84ms)
+ GET /image-to-video 200 in 73ms (next.js: 10ms, application-code: 64ms)
+ GET /text-to-video 200 in 106ms (next.js: 9ms, application-code: 98ms)
+ GET /image-to-image 200 in 136ms (next.js: 13ms, application-code: 123ms)
+ GET /history 200 in 57ms (next.js: 7ms, application-code: 50ms)
+ GET /api/credits 403 in 19ms (next.js: 3ms, application-code: 16ms)
+  Turbopack has seen frequent file updates and is waiting for the filesystem to settle (0.5s elapsed so far; last modified: "\\\\?\\E:\\Code\\image-gen\\node_modules\\@smithy\\node-http-handler\\dist-cjs").
+ GET /api/credits 200 in 1075ms (next.js: 56ms, application-code: 1019ms)
+ GET /api/history 200 in 2.8s (next.js: 32ms, application-code: 2.7s)
+ GET / 200 in 58ms (next.js: 1.3ms, application-code: 56ms)
+ GET /history 200 in 42ms (next.js: 5ms, application-code: 38ms)
+ GET /api/history 200 in 500ms (next.js: 1.7ms, application-code: 498ms)
+ GET / 200 in 45ms (next.js: 2ms, application-code: 43ms)
+ GET /video-image-to-video 200 in 44ms (next.js: 1.9ms, application-code: 42ms)
+ GET /api/credits 200 in 411ms (next.js: 1.5ms, application-code: 410ms)
+ GET / 200 in 39ms (next.js: 1.8ms, application-code: 37ms)
+ GET /image-to-video 200 in 29ms (next.js: 3ms, application-code: 27ms)
+ GET /api/credits 200 in 417ms (next.js: 3ms, application-code: 414ms)
+  Turbopack has seen frequent file updates and is waiting for the filesystem to settle (0.5s elapsed so far; last modified: "\\\\?\\E:\\Code\\image-gen\\node_modules\\punycode").
+  Turbopack has seen frequent file updates and is waiting for the filesystem to settle (0.5s elapsed so far; last modified: "\\\\?\\E:\\Code\\image-gen\\node_modules\\@smithy\\types\\dist-types\\externals-check").
