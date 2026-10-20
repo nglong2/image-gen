@@ -1,18 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { ApiClientError } from "@/lib/api/client";
+import { fetchCreditBalance } from "@/lib/api/credits";
+import { createGenerateTask } from "@/lib/api/generate";
+import { saveHistoryToR2 } from "@/lib/api/history";
+import { uploadFile } from "@/lib/api/upload";
 import {
   addHistoryItem,
   getHistorySnapshot,
   getServerHistory,
-  removeHistoryItem,
   subscribeHistory,
-  updateHistoryItem,
   type HistoryItem,
 } from "@/lib/history";
-import { APP_KEY_HEADER, type TaskState } from "@/lib/kie-shared";
-import type { ToolConfig, ToolResultKind } from "@/lib/tools";
-import { getStoredAppKey, useAppKey } from "@/hooks/useAppKey";
+import type { TaskState } from "@/lib/kie-shared";
+import type { ToolConfig } from "@/lib/tools";
+import { getStoredAppKey, useAppKey } from "@/viewmodels/useAppKey";
+import { pollTaskUntilDone } from "@/viewmodels/task-polling";
 
 export type RunStatus = "idle" | "uploading" | "creating" | "generating" | "success" | "error";
 
@@ -33,21 +37,6 @@ const STATUS_LABELS: Record<RunStatus, string> = {
   error: "",
 };
 
-const POLL: Record<ToolResultKind, { interval: number; maxAttempts: number }> = {
-  image: { interval: 3000, maxAttempts: 100 }, // ~5 phút
-  video: { interval: 5000, maxAttempts: 180 }, // ~15 phút
-};
-
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-type PollOutcome =
-  | { kind: "success"; urls: string[]; credits?: number }
-  | { kind: "fail"; message: string }
-  | { kind: "timeout" }
-  | { kind: "stopped" }
-  | { kind: "error"; message: string };
-
 export interface GenerateParams {
   model: string;
   prompt: string;
@@ -62,6 +51,11 @@ export interface GenerateParams {
   nsfwChecker: boolean;
 }
 
+/**
+ * ViewModel dùng chung cho các trang tool gen (View chỉ render + gọi generate):
+ * quản lý trạng thái chạy (upload → tạo task → poll), lỗi, số dư credit
+ * và resume các task pending sau khi F5. Mọi call API đều qua `lib/api/*`.
+ */
 export function useTaskRunner(tool: ToolConfig) {
   const [status, setStatus] = useState<RunStatus>("idle");
   const [genState, setGenState] = useState<TaskState | null>(null);
@@ -99,7 +93,6 @@ export function useTaskRunner(tool: ToolConfig) {
     return () => clearInterval(timer);
   }, [status]);
 
-
   const dismissError = useCallback(() => {
     setError(null);
     setStatus((current) => (current === "error" ? "idle" : current));
@@ -115,9 +108,8 @@ export function useTaskRunner(tool: ToolConfig) {
   const refreshBalance = useCallback(async (key: string) => {
     if (!key) return;
     try {
-      const res = await fetch("/api/credits", { headers: { [APP_KEY_HEADER]: key } });
-      const data = (await res.json().catch(() => null)) ?? {};
-      if (res.ok && typeof data.balance === "number") setBalance(data.balance);
+      const { balance: value } = await fetchCreditBalance(key);
+      if (typeof value === "number") setBalance(value);
     } catch {
       // số dư là thông tin phụ trợ — lỗi thì bỏ qua
     }
@@ -134,19 +126,15 @@ export function useTaskRunner(tool: ToolConfig) {
   const saveHistory = useCallback(
     async (item: HistoryItem, urls: string[], credits: number | undefined, key: string) => {
       try {
-        await fetch("/api/history/save", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", [APP_KEY_HEADER]: key },
-          body: JSON.stringify({
-            taskId: item.id,
-            tool: item.tool,
-            model: item.model,
-            prompt: item.prompt,
-            resultKind: item.resultKind,
-            credits,
-            createdAt: item.createdAt,
-            sourceUrls: urls,
-          }),
+        await saveHistoryToR2(key, {
+          taskId: item.id,
+          tool: item.tool,
+          model: item.model,
+          prompt: item.prompt,
+          resultKind: item.resultKind,
+          credits,
+          createdAt: item.createdAt,
+          sourceUrls: urls,
         });
       } catch {
         // best-effort — xem /history để kiểm tra sau
@@ -155,65 +143,8 @@ export function useTaskRunner(tool: ToolConfig) {
     [],
   );
 
-  /** Poll 1 taskId tới success/fail — dùng cho generate lẫn resume sau F5. */
-  const pollUntilDone = useCallback(
-    async (
-      taskId: string,
-      key: string,
-      resultKind: ToolResultKind,
-      onState: (state: TaskState) => void,
-    ): Promise<PollOutcome> => {
-      const { interval, maxAttempts } = POLL[resultKind];
-      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-        await sleep(interval);
-        if (cancelledRef.current) return { kind: "stopped" };
-
-        let data: {
-          state?: TaskState;
-          resultUrls?: string[];
-          failMsg?: string;
-          error?: string;
-          credits?: number;
-        };
-        try {
-          const res = await fetch(`/api/task?taskId=${encodeURIComponent(taskId)}`, {
-            headers: { [APP_KEY_HEADER]: key },
-          });
-          data = (await res.json().catch(() => null)) ?? {};
-          if (!res.ok) throw new Error(data.error ?? "Không kiểm tra được trạng thái tác vụ.");
-        } catch (err) {
-          return {
-            kind: "error",
-            message: err instanceof Error ? err.message : "Mất kết nối khi kiểm tra tác vụ.",
-          };
-        }
-        if (cancelledRef.current) return { kind: "stopped" };
-
-        if (data.state) onState(data.state);
-        if (data.state === "success") {
-          const urls = Array.isArray(data.resultUrls) ? data.resultUrls : [];
-          if (urls.length === 0) {
-            removeHistoryItem(taskId);
-            return { kind: "fail", message: "Tác vụ hoàn tất nhưng không trả về nội dung." };
-          }
-          updateHistoryItem(taskId, { state: "success", urls, credits: data.credits });
-          return { kind: "success", urls, credits: data.credits };
-        }
-        if (data.state === "fail") {
-          removeHistoryItem(taskId);
-          return {
-            kind: "fail",
-            message: data.failMsg ? `Tạo thất bại: ${data.failMsg}` : "Tạo nội dung thất bại.",
-          };
-        }
-      }
-      return { kind: "timeout" };
-    },
-    [],
-  );
-
   // Resume các task còn "pending" sau khi F5/thoát app rồi vô lại —
-  // không giới hạn tuổi (taskId vẫn query được, kie giữ log2 tháng);
+  // không giới hạn tuổi (taskId vẫn query được, kie giữ log 2 tháng);
   // poll hết lượt mà task chưa xong thì giữ pending, lần vào sau tự tiếp.
   useEffect(() => {
     const key = getStoredAppKey();
@@ -222,7 +153,12 @@ export function useTaskRunner(tool: ToolConfig) {
       if (item.state !== "pending") continue;
       if (resumedRef.current.has(item.id)) continue;
       resumedRef.current.add(item.id);
-      void pollUntilDone(item.id, key, item.resultKind, () => {})
+      void pollTaskUntilDone({
+        taskId: item.id,
+        appKey: key,
+        resultKind: item.resultKind,
+        isCancelled: () => cancelledRef.current,
+      })
         .then((outcome) => {
           if (cancelledRef.current) return;
           void refreshBalance(key);
@@ -232,7 +168,8 @@ export function useTaskRunner(tool: ToolConfig) {
         })
         .catch(() => {});
     }
-  }, [history, pollUntilDone, refreshBalance, saveHistory]);
+  }, [history, refreshBalance, saveHistory]);
+
 
   /** Chạy luồng: (upload) → createTask → poll → kết quả. */
   const generate = async (params: GenerateParams): Promise<void> => {
@@ -255,19 +192,10 @@ export function useTaskRunner(tool: ToolConfig) {
         const cached = uploadCacheRef.current.get(cacheKey);
         if (cached) return cached;
         setStatus("uploading");
-        const formData = new FormData();
-        formData.append("file", file);
-        const res = await fetch("/api/upload", {
-          method: "POST",
-          headers: { [APP_KEY_HEADER]: key },
-          body: formData,
-        });
-        const data = (await res.json().catch(() => null)) ?? {};
-        if (!res.ok || !data.downloadUrl) {
-          throw new Error(data.error ?? "Tải file lên thất bại.");
-        }
-        uploadCacheRef.current.set(cacheKey, data.downloadUrl);
-        return data.downloadUrl;
+        const { downloadUrl } = await uploadFile(key, file);
+        if (!downloadUrl) throw new Error("Tải file lên thất bại.");
+        uploadCacheRef.current.set(cacheKey, downloadUrl);
+        return downloadUrl;
       };
 
       // Bước 1: upload ảnh chính + ảnh ref + video ref (nếu có)
@@ -294,27 +222,20 @@ export function useTaskRunner(tool: ToolConfig) {
 
       // Bước 2: tạo task
       setStatus("creating");
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", [APP_KEY_HEADER]: key },
-        body: JSON.stringify({
-          tool: tool.slug,
-          model: params.model,
-          prompt: params.prompt,
-          imageUrls: imageUrl ? [imageUrl] : undefined,
-          refImageUrls: refImageUrls.length > 0 ? refImageUrls : undefined,
-          refVideoUrls: refVideoUrl ? [refVideoUrl] : undefined,
-          options: params.options,
-          nsfwChecker: params.nsfwChecker,
-        }),
+      const { taskId } = await createGenerateTask(key, {
+        tool: tool.slug,
+        model: params.model,
+        prompt: params.prompt,
+        imageUrls: imageUrl ? [imageUrl] : undefined,
+        refImageUrls: refImageUrls.length > 0 ? refImageUrls : undefined,
+        refVideoUrls: refVideoUrl ? [refVideoUrl] : undefined,
+        options: params.options,
+        nsfwChecker: params.nsfwChecker,
       });
-      const data = (await res.json().catch(() => null)) ?? {};
-      if (!res.ok || !data.taskId) {
-        throw new Error(data.error ?? "Không tạo được tác vụ.");
-      }
+      if (!taskId) throw new Error("Không tạo được tác vụ.");
 
       const item: HistoryItem = {
-        id: data.taskId,
+        id: taskId,
         tool: tool.slug,
         model: params.model,
         prompt: params.prompt,
@@ -332,9 +253,13 @@ export function useTaskRunner(tool: ToolConfig) {
       setStatus("generating");
       setGenState("waiting");
 
-      const outcome = await pollUntilDone(data.taskId, key, tool.resultKind, (state) =>
-        setGenState(state),
-      );
+      const outcome = await pollTaskUntilDone({
+        taskId,
+        appKey: key,
+        resultKind: tool.resultKind,
+        onState: (state) => setGenState(state),
+        isCancelled: () => cancelledRef.current,
+      });
       if (cancelledRef.current || outcome.kind === "stopped") return;
       void refreshBalance(key);
 
@@ -352,6 +277,7 @@ export function useTaskRunner(tool: ToolConfig) {
             : "Quá thời gian chờ (5 phút). Task vẫn có thể đang chạy — thử lại sau ít phút.",
         );
       }
+      if (outcome.kind === "error") throw new ApiClientError(outcome.message);
       throw new Error(outcome.message);
     } catch (err) {
       if (cancelledRef.current) return;

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import AppKeyField from "@/components/AppKeyField";
-import { useAppKey } from "@/hooks/useAppKey";
+import { useAppKey } from "@/viewmodels/useAppKey";
 
 /** Header trang hub — có ô App key góc phải (dùng chung key với mọi trang). */
 export default function HubHeader() {

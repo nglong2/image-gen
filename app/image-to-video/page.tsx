@@ -10,7 +10,7 @@ import RefInputs from "@/components/RefInputs";
 import ResultMedia from "@/components/ResultMedia";
 import TaskProgress from "@/components/TaskProgress";
 import ToolShell from "@/components/ToolShell";
-import { useTaskRunner } from "@/hooks/useTaskRunner";
+import { useTaskRunner } from "@/viewmodels/useTaskRunner";
 import { estimateCredits } from "@/lib/credit-est";
 import { validateImageFile } from "@/lib/kie-shared";
 import { requireTool, resolveToolConfig, sanitizeOptions } from "@/lib/tools";

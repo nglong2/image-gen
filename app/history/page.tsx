@@ -2,30 +2,9 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import AppKeyField from "@/components/AppKeyField";
-import { useAppKey } from "@/hooks/useAppKey";
-import {
-  getHistorySnapshot,
-  getServerHistory,
-  removeHistoryItem,
-  subscribeHistory,
-  updateHistoryItem,
-} from "@/lib/history";
-import { APP_KEY_HEADER } from "@/lib/kie-shared";
-
-interface HistoryItem {
-  taskId: string;
-  tool: string;
-  model: string;
-  prompt: string;
-  resultKind: "image" | "video";
-  credits?: number;
-  createdAt: number;
-  savedAt: number;
-  urls: string[];
-  sourceUrls: string[];
-}
+import { downloadMedia } from "@/lib/download";
+import { useHistoryViewModel } from "@/viewmodels/useHistoryViewModel";
 
 const TOOL_LABELS: Record<string, string> = {
   "image-to-image": "Chỉnh sửa ảnh",
@@ -34,160 +13,14 @@ const TOOL_LABELS: Record<string, string> = {
   "video-image-to-video": "Video + Ảnh → Video",
 };
 
+/** View trang Lịch sử — toàn bộ state + logic (tải DS, resume task, xoá) nằm ở useHistoryViewModel. */
 export default function HistoryPage() {
-  const { appKey, setAppKey } = useAppKey();
-  const [items, setItems] = useState<HistoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const vm = useHistoryViewModel();
+  const { appKey, setAppKey, items, loading, error, deletingId, pending } = vm;
 
-  // Task pending từ localStorage (bắt đầu gen rồi thoát app — vô đây sẽ tự theo dõi lại)
-  const localItems = useSyncExternalStore(subscribeHistory, getHistorySnapshot, getServerHistory);
-  const pending = localItems.filter((item) => item.state === "pending");
-  const resumeRef = useRef<Set<string>>(new Set());
-  const aliveRef = useRef(true);
-
-  const load = useCallback(async (key: string) => {
-    if (!key.trim()) {
-      setItems([]);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/history", { headers: { [APP_KEY_HEADER]: key.trim() } });
-      const data = (await res.json().catch(() => null)) ?? {};
-      if (!res.ok) throw new Error(data.error ?? "Không tải được lịch sử.");
-      setItems(Array.isArray(data.items) ? data.items : []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Không tải được lịch sử.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Nạp khi có App key (debounced) — không có key thì chỉ render hướng dẫn nhập key
-  useEffect(() => {
-    const key = appKey.trim();
-    if (!key) return;
-    const timer = setTimeout(() => void load(key), 500);
-    return () => clearTimeout(timer);
-  }, [appKey, load]);
-
-  useEffect(() => {
-    aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-    };
-  }, []);
-
-  // Tự theo dõi lại các task pending: poll tới success/fail rồi lưu R2 + refresh danh sách
-  useEffect(() => {
-    const key = appKey.trim();
-    if (!key) return;
-    for (const item of localItems) {
-      if (item.state !== "pending") continue;
-      if (resumeRef.current.has(item.id)) continue;
-      resumeRef.current.add(item.id);
-      void (async () => {
-        for (let attempt = 0; attempt < 240; attempt += 1) {
-          // ~20 phút mỗi lượt — quá lượt thì giữ pending, lần vô sau tự tiếp
-          await new Promise((resolve) => setTimeout(resolve, 5000));
-          if (!aliveRef.current) return;
-          let data: { state?: string; resultUrls?: string[]; failMsg?: string; credits?: number };
-          try {
-            const res = await fetch(`/api/task?taskId=${encodeURIComponent(item.id)}`, {
-              headers: { [APP_KEY_HEADER]: key },
-            });
-            data = (await res.json().catch(() => null)) ?? {};
-            if (!res.ok) return;
-          } catch {
-            return;
-          }
-          if (!aliveRef.current) return;
-
-          if (data.state === "success") {
-            const urls = Array.isArray(data.resultUrls) ? data.resultUrls : [];
-            if (urls.length === 0) {
-              removeHistoryItem(item.id);
-              return;
-            }
-            updateHistoryItem(item.id, { state: "success", urls, credits: data.credits });
-            try {
-              await fetch("/api/history/save", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", [APP_KEY_HEADER]: key },
-                body: JSON.stringify({
-                  taskId: item.id,
-                  tool: item.tool,
-                  model: item.model,
-                  prompt: item.prompt,
-                  resultKind: item.resultKind,
-                  credits: data.credits,
-                  createdAt: item.createdAt,
-                  sourceUrls: urls,
-                }),
-              });
-            } catch {
-              // best-effort
-            }
-            if (aliveRef.current) void load(key);
-            return;
-          }
-          if (data.state === "fail") {
-            removeHistoryItem(item.id);
-            if (aliveRef.current) {
-              setError(
-                `Task ${item.id.slice(0, 8)} thất bại${data.failMsg ? `: ${data.failMsg}` : "."}`,
-              );
-            }
-            return;
-          }
-        }
-      })();
-    }
-  }, [appKey, localItems, load]);
-
-  const handleDelete = async (taskId: string) => {
-    if (!appKey.trim()) return;
+  const handleDelete = (taskId: string) => {
     if (!window.confirm("Xoá mục này khỏi R2? (bao gồm cả file media)")) return;
-    setDeletingId(taskId);
-    try {
-      const res = await fetch(`/api/history?taskId=${encodeURIComponent(taskId)}`, {
-        method: "DELETE",
-        headers: { [APP_KEY_HEADER]: appKey.trim() },
-      });
-      const data = (await res.json().catch(() => null)) ?? {};
-      if (!res.ok) throw new Error(data.error ?? "Xoá thất bại.");
-      setItems((prev) => prev.filter((item) => item.taskId !== taskId));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Xoá thất bại.");
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const handleDownload = async (url: string, kind: "image" | "video") => {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("download failed");
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      const base = url.split("?")[0].split("/").pop() ?? "";
-      anchor.download = /\.[a-z0-9]+$/i.test(base)
-        ? base
-        : `result.${kind === "video" ? "mp4" : "png"}`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(objectUrl);
-    } catch {
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
+    void vm.deleteItem(taskId);
   };
 
   return (
@@ -237,7 +70,7 @@ export default function HistoryPage() {
             <span className="break-words">{error}</span>
             <button
               type="button"
-              onClick={() => setError(null)}
+              onClick={vm.dismissError}
               className="shrink-0 font-medium underline underline-offset-2 hover:opacity-70"
             >
               Đóng
@@ -311,7 +144,7 @@ export default function HistoryPage() {
                       <>
                         <button
                           type="button"
-                          onClick={() => handleDownload(item.urls[0], item.resultKind)}
+                          onClick={() => void downloadMedia(item.urls[0], item.resultKind)}
                           className="rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
                         >
                           Tải về
