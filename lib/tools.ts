@@ -377,8 +377,25 @@ export const TOOLS: ToolConfig[] = [
         overrides: {
           imageField: "image_urls",
           imageAsArray: true,
-          options: [aspectSpec(GROK_ASPECT, "1:1"), grokModeSpec(), durSpec(6, 30, true), resSpec(RES_FULL)],
+          // i2v với ảnh ngoài chỉ hỗ trợ mode fun/normal (spicy chỉ dùng với task_id nội bộ của Grok)
+          options: [
+            aspectSpec(GROK_ASPECT, "1:1"),
+            { key: "mode", label: "Mode", type: "select", choices: ch(["fun", "normal"], ["fun (vui nhộn)", "normal (cân bằng)"]), defaultValue: "normal" },
+            durSpec(6, 30, true),
+            resSpec(RES_FULL),
+          ],
           prompt: { min: 4, max: 5000 },
+        },
+      },
+      {
+        value: "grok-imagine-video-1-5-preview",
+        label: "Grok Imagine1.5 Preview (≤7 ảnh, auto aspect)",
+        overrides: {
+          imageField: "image_urls",
+          imageAsArray: true,
+          //1.5: với1 ảnh duy nhất, aspect theo ảnh (không cần chọn)
+          options: [durSpec(6, 15, true), resSpec(RES_FULL)],
+          prompt: { min: 4, max: 4096 },
         },
       },
     ],
