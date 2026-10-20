@@ -28,6 +28,9 @@ const VIDEO_RATES: Record<string, Record<string, number>> = {
   "bytedance/seedance-2-mini": { "480p": 3.8, "720p": 8.2 },
   "bytedance/seedance-2-fast": { "480p": 11.7, "720p": 24.8 },
   "bytedance/seedance-2-5": { "480p": 28, "720p": 63, "1080p": 158 },
+  "grok-imagine/text-to-video": { "480p": 2.4, "720p": 4.5, "1080p": 8 },
+  "grok-imagine/image-to-video": { "480p": 2.4, "720p": 4.5, "1080p": 8 },
+  "grok-imagine-video-1-5-preview": { "480p": 2.4, "720p": 4.5, "1080p": 8 },
 };
 
 /**
@@ -53,6 +56,8 @@ const IMAGE_PRICES: Record<string, number | Record<string, number>> = {
   "seedream/5-lite-text-to-image": 5.5,
   "seedream/4.5-text-to-image": 6.5,
   "bytedance/seedream": 3.5, // Seedream3.0
+  "grok-imagine/text-to-image": 4, // đo thật:4 credit/task (Grok trả2 ảnh/task)
+  "grok-imagine/image-to-image": 4, // đo thật
 };
 
 function roundCredit(value: number): number {

@@ -218,6 +218,27 @@ const GEN_AUDIO_SPEC: OptionSpec = {
   hint: "Bật audio có thể làm tăng credit — tham khảo kie.ai/pricing.",
 };
 
+/** Grok Imagine dùng bộ aspect khác Seedream (không có21:9,2:3↔3:2). */
+const GROK_ASPECT = ch(["2:3", "3:2", "1:1", "9:16", "16:9"]);
+const GROK15_ASPECT = ch(["auto", "1:1", "16:9", "9:16", "3:2", "2:3"]);
+const GROK_MODE = ch(["fun", "normal", "spicy"], ["fun (vui nhộn)", "normal (cân bằng)", "spicy (mạnh mẽ)"]);
+
+const grokModeSpec = (def = "normal"): OptionSpec => ({
+  key: "mode",
+  label: "Mode",
+  type: "select",
+  choices: GROK_MODE,
+  defaultValue: def,
+});
+
+const enableProSpec: OptionSpec = {
+  key: "enable_pro",
+  label: "Chế độ quality (enable_pro)",
+  type: "checkbox",
+  defaultValue: false,
+  hint: "Bật = ưu tiên chất lượng; tắt = speed mode (nhanh hơn).",
+};
+
 export const TOOLS: ToolConfig[] = [
   {
     slug: "text-to-video",
@@ -260,6 +281,22 @@ export const TOOLS: ToolConfig[] = [
         overrides: {
           options: [aspectSpec(ASPECT_ADAPTIVE), resSpec(RES_FULL), durSpec(5, 30, true), GEN_AUDIO_SPEC],
           prompt: { min: 4, max: 20480 },
+        },
+      },
+      {
+        value: "grok-imagine/text-to-video",
+        label: "Grok Imagine Video (6–30s, mode fun/normal/spicy)",
+        overrides: {
+          options: [aspectSpec(GROK_ASPECT, "16:9"), grokModeSpec(), durSpec(6, 30, true), resSpec(RES_FULL)],
+          prompt: { min: 4, max: 5000 },
+        },
+      },
+      {
+        value: "grok-imagine-video-1-5-preview",
+        label: "Grok Imagine1.5 Preview (aspect auto)",
+        overrides: {
+          options: [aspectSpec(GROK15_ASPECT, "auto"), durSpec(6, 15, true), resSpec(RES_FULL)],
+          prompt: { min: 4, max: 4096 },
         },
       },
     ],
@@ -334,6 +371,16 @@ export const TOOLS: ToolConfig[] = [
           prompt: { min: 4, max: 20480 },
         },
       },
+      {
+        value: "grok-imagine/image-to-video",
+        label: "Grok Imagine (6–30s, ≤7 ảnh ref, @image1…)",
+        overrides: {
+          imageField: "image_urls",
+          imageAsArray: true,
+          options: [aspectSpec(GROK_ASPECT, "1:1"), grokModeSpec(), durSpec(6, 30, true), resSpec(RES_FULL)],
+          prompt: { min: 4, max: 5000 },
+        },
+      },
     ],
     defaultModel: "bytedance/v1-pro-image-to-video",
     prompt: { min: 4, max: 10000 },
@@ -386,6 +433,14 @@ export const TOOLS: ToolConfig[] = [
             { key: "image_resolution", label: "Độ phân giải", type: "select", choices: RES_124, defaultValue: "1K" },
             { key: "max_images", label: "Số ảnh tối đa (1–6)", type: "range", range: { min: 1, max: 6, step: 1, asNumber: true }, defaultValue: "1", hint: "Giới hạn số ảnh một lần tạo — giá tính theo từng ảnh (5 credit/ảnh)." },
           ],
+        },
+      },
+      {
+        value: "grok-imagine/image-to-image",
+        label: "Grok Imagine (≤5 ảnh ref, tham chiếu @image1…)",
+        overrides: {
+          options: [],
+          prompt: { min: 4, max: 5000 },
         },
       },
     ],
@@ -559,6 +614,14 @@ export const TOOLS: ToolConfig[] = [
           options: [
             { key: "image_size", label: "Khung ảnh", type: "select", choices: IMAGE_SIZE_V30, defaultValue: "square" },
           ],
+        },
+      },
+      {
+        value: "grok-imagine/text-to-image",
+        label: "Grok Imagine (~4/ảnh, có enable_pro)",
+        overrides: {
+          options: [aspectSpec(GROK_ASPECT, "1:1"), enableProSpec],
+          prompt: { min: 4, max: 5000 },
         },
       },
     ],

@@ -21,6 +21,19 @@ export default function HubPage() {
       <HubHeader />
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
+        <Link
+          href="/logo"
+          className="mb-6 flex items-center justify-between gap-4 rounded-2xl border border-zinc-900 bg-zinc-900 p-5 text-white shadow-sm transition hover:opacity-90 dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
+        >
+          <span>
+            <span className="text-lg font-semibold">🎨 Logo Studio</span>
+            <span className="mt-0.5 block text-sm opacity-80">
+              Trang chuyên dụng: prompt mẫu có sẵn, tối ưu tự động, xuất SVG — tạo & chỉnh sửa logo
+            </span>
+          </span>
+          <span className="shrink-0 text-2xl">→</span>
+        </Link>
+
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
           Hoạt động
         </h2>
