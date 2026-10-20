@@ -3,7 +3,6 @@ import HubHeader from "@/components/HubHeader";
 import { TOOLS } from "@/lib/tools";
 
 const COMING_SOON = [
-  "Text → Image",
   "Image Editing",
   "Video Editing",
   "Video Upscale",

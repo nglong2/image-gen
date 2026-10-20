@@ -48,6 +48,11 @@ const IMAGE_PRICES: Record<string, number | Record<string, number>> = {
   "seedream/5-lite-image-to-image": 5.5,
   "seedream/4.5-edit": 6.5,
   "bytedance/seedream-v4-edit": 5, // 5 credit/ảnh × max_images
+  "seedream/5-pro-text-to-image": { basic: 7, high: 14 },
+  "seedream/5-flash-text-to-image": 3.24,
+  "seedream/5-lite-text-to-image": 5.5,
+  "seedream/4.5-text-to-image": 6.5,
+  "bytedance/seedream": 3.5, // Seedream3.0
 };
 
 function roundCredit(value: number): number {

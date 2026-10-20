@@ -10,7 +10,7 @@ import ResultMedia from "@/components/ResultMedia";
 import TaskProgress from "@/components/TaskProgress";
 import ToolShell from "@/components/ToolShell";
 import VideoDropZone from "@/components/VideoDropZone";
-import { useTaskRunner } from "@/hooks/useTaskRunner";
+import { useTaskRunner } from "@/viewmodels/useTaskRunner";
 import { estimateCredits } from "@/lib/credit-est";
 import { requireTool, resolveToolConfig, sanitizeOptions } from "@/lib/tools";
 

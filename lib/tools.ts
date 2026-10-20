@@ -163,6 +163,12 @@ const IMAGE_SIZE_V4 = ch(
   ],
 );
 
+/** Seedream3.0 (bytedance/seedream) — chỉ6 preset khung ảnh. */
+const IMAGE_SIZE_V30 = ch(
+  ["square", "square_hd", "portrait_4_3", "portrait_16_9", "landscape_4_3", "landscape_16_9"],
+  ["Square", "Square HD", "Portrait 3:4", "Portrait 9:16", "Landscape 4:3", "Landscape 16:9"],
+);
+
 const aspectSpec = (choices: OptionChoice[], def = "16:9"): OptionSpec => ({
   key: "aspect_ratio",
   label: "Tỷ lệ khung hình",
@@ -502,6 +508,68 @@ export const TOOLS: ToolConfig[] = [
     defaultModel: "bytedance/seedance-2-5",
     prompt: { min: 4, max: 10000 },
     options: [resSpec(RES_FULL), durSpec(5, 10, false)],
+  },
+  {
+    slug: "text-to-image",
+    title: "Text → Image",
+    description: "Nhập prompt, Seedream tạo ảnh (đủ version 3.0 → 5.0).",
+    resultKind: "image",
+    inputKind: "none",
+    imageField: "",
+    imageAsArray: false,
+    models: [
+      {
+        value: "seedream/5-flash-text-to-image",
+        label: "Seedream 5.0 Flash (rẻ nhất,3.24/ảnh)",
+        overrides: {
+          options: [
+            aspectSpec(ASPECT8, "1:1"),
+            { key: "size", label: "Độ phân giải", type: "select", choices: SIZE_FLASH, defaultValue: "1K" },
+            formatSpec(),
+          ],
+        },
+      },
+      {
+        value: "seedream/5-pro-text-to-image",
+        label: "Seedream 5.0 Pro",
+        overrides: {
+          options: [aspectSpec(ASPECT8, "1:1"), qualitySpec(QUALITY_5PRO), formatSpec()],
+        },
+      },
+      {
+        value: "seedream/5-lite-text-to-image",
+        label: "Seedream 5.0 Lite (tới 4K)",
+        overrides: {
+          options: [aspectSpec(ASPECT8, "1:1"), qualitySpec(QUALITY_LITE), formatSpec()],
+          prompt: { min: 4, max: 2995 },
+        },
+      },
+      {
+        value: "seedream/4.5-text-to-image",
+        label: "Seedream 4.5",
+        overrides: {
+          options: [aspectSpec(ASPECT8, "1:1"), qualitySpec(QUALITY_45)],
+          prompt: { min: 4, max: 3000 },
+        },
+      },
+      {
+        value: "bytedance/seedream",
+        label: "Seedream 3.0 (3.5/ảnh)",
+        overrides: {
+          options: [
+            { key: "image_size", label: "Khung ảnh", type: "select", choices: IMAGE_SIZE_V30, defaultValue: "square" },
+          ],
+        },
+      },
+    ],
+    defaultModel: "seedream/5-flash-text-to-image",
+    prompt: { min: 4, max: 5000 },
+    // Options mặc định = của Flash (model mặc định)
+    options: [
+      aspectSpec(ASPECT8, "1:1"),
+      { key: "size", label: "Độ phân giải", type: "select", choices: SIZE_FLASH, defaultValue: "1K" },
+      formatSpec(),
+    ],
   },
 ];
 
